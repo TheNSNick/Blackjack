@@ -1,5 +1,3 @@
-import Dovetail
-
 class Card:
     value_short_name = {1: 'A', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7',
                         8: '8', 9: '9', 10: '10', 11:'J', 12: 'Q', 13: 'K'}
@@ -29,12 +27,3 @@ class Card:
             return self.value
         else:
             return 10
-
-
-def generate_shoe(num_decks=1, num_shuffles=3):
-    new_shoe = []
-    for _ in range(num_decks):
-        for v in range(1, 14):
-            for s in range(4):
-                new_shoe.append(Card(v, s))
-    return Dovetail.shuffle(new_shoe, eff_shuffles=num_shuffles)

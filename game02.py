@@ -69,9 +69,12 @@ COORDS = {'INTRO_HEADER': (SCREEN_WIDTH/2, SCREEN_HEIGHT/6),
                            ],
           'DEALER_HAND': (SCREEN_WIDTH/20, SCREEN_HEIGHT/6),
           'PLAYER_HAND': (SCREEN_WIDTH/20, 7*SCREEN_HEIGHT/12),
+          'SPLIT_HAND': (SCREEN_WIDTH/2, 7*SCREEN_HEIGHT/12),
           'DEALER_TOTAL': (SCREEN_WIDTH/10, SCREEN_HEIGHT/6-FONT_TOTAL_SIZE-5),
           'PLAYER_TOTAL': (SCREEN_WIDTH/10, 7*SCREEN_HEIGHT/12-FONT_TOTAL_SIZE-5),
+          'SPLIT_TOTAL': (11*SCREEN_WIDTH/20, 7*SCREEN_HEIGHT/12-FONT_TOTAL_SIZE-5),
           'RESULT': (3*SCREEN_WIDTH/20, 7*SCREEN_HEIGHT/12-FONT_TOTAL_SIZE-5),
+          'SPLIT_RESULT': (6*SCREEN_WIDTH/10, 7*SCREEN_HEIGHT/12-FONT_TOTAL_SIZE-5),
           'SHOE': (29*SCREEN_WIDTH/32, 5*SCREEN_HEIGHT/24)
           }
 
@@ -88,6 +91,8 @@ def main():
     bet = 1
     player = Hand.Hand()
     dealer = Hand.Hand()
+    split = Hand.Hand()
+    is_split = False
     shoe = generate_shoe(SHOE_NUM_DECKS, SHOE_NUM_EFF_SHUFFLES)
     card_back = pygame.image.load(FILE_NAMES['CARD_BACK']).convert()
     card_spritesheet = pygame.image.load(FILE_NAMES['CARD_SHEET']).convert()
@@ -115,32 +120,49 @@ def main():
                         state = 'PLAY'
                         chips -= bet
                         for i in range(2):
-                            draw_card_deal_animation(screen, state, phase, bet, chips, 'PLAYER', player, dealer, card_spritesheet, clock)
+                            draw_card_deal_animation(screen, state, phase, is_split, bet, chips, 'PLAYER', player, dealer, split, card_spritesheet, clock)
                             player.add_card(shoe.pop(0))
-                            draw_card_deal_animation(screen, state, phase, bet, chips, 'DEALER', player, dealer, card_spritesheet, clock)
+                            draw_card_deal_animation(screen, state, phase, is_split, bet, chips, 'DEALER', player, dealer, split, card_spritesheet, clock)
                             dealer.add_card(shoe.pop(0))
                 elif state == 'PLAY' and phase == 'PLAYER':
                     if event.key == K_h:
-                        draw_card_deal_animation(screen, state, phase, bet, chips, 'PLAYER', player, dealer, card_spritesheet, clock)
-                        player.add_card(shoe.pop(0))
-                        if player.is_bust():
-                            state = 'SHOWDOWN'
-                            chips += pay_hand(player, dealer, bet)
+                        if phase == 'PLAYER':
+                            draw_card_deal_animation(screen, state, phase, is_split, bet, chips, 'PLAYER', player, dealer, split, card_spritesheet, clock)
+                            player.add_card(shoe.pop(0))
+                            if player.is_bust():
+                                if is_split:
+                                    state = 'SPLIT'
+                                else:
+                                    state = 'SHOWDOWN'
+                                    chips += pay_hand(player, dealer, bet)
+                        elif phase == 'SPLIT':
+                            draw_card_deal_animation(screen, state, phase, is_split, bet, chips, 'SPLIT', player, dealer, split, card_spritesheet, clock)
+                            split.add_card(shoe.pop(0))
+                            if split.is_bust():
+                                state = 'SHOWDOWN'
+                                chips += pay_hand(player, dealer, bet/2)
+                                chips += pay_hand(split, dealer, bet/2)
                     if event.key == K_s:
-                        phase = 'DEALER'
-                    if event.key == K_d and player.can_double():
+                        if is_split and phase == 'PLAYER':
+                            phase = 'SPLIT'
+                        else:
+                            phase = 'DEALER'
+                    if event.key == K_d and player.can_double() and not is_split:
                         chips -= bet
                         bet += bet
-                        draw_card_deal_animation(screen, state, phase, bet, chips, 'PLAYER', player, dealer, card_spritesheet, clock)
+                        draw_card_deal_animation(screen, state, phase, is_split, bet, chips, 'PLAYER', player, dealer, split, card_spritesheet, clock)
                         player.add_card(shoe.pop(0))
                         if player.is_bust():
                             state = 'SHOWDOWN'
                             chips += pay_hand(player, dealer, bet)
                         else:
                             phase = 'DEALER'
-                    if event.key == K_s and player.can_split():
-                        # TODO -- SPLITTING
-                        pass
+                    if event.key == K_p and player.can_split() and not is_split:
+                        if chips >= bet:
+                            chips -= bet
+                            bet += bet
+                            split.add_card(player.split())
+                            is_split = True
                 elif state == 'SHOWDOWN' and (event.key == K_RETURN or event.key == K_KP_ENTER):
                     phase = 'PLAYER'
                     player.clear()
@@ -155,16 +177,16 @@ def main():
         elif state == 'BET':
             draw_bet_screen(screen, bet, chips)
         elif state == 'PLAY':
-            draw_play_screen(screen, phase, bet, chips, player, dealer, card_spritesheet)
+            draw_play_screen(screen, phase, is_split, bet, chips, player, dealer, split, card_spritesheet)
         elif state == 'SHOWDOWN':
-            draw_showdown_screen(screen, bet, chips, player, dealer, card_spritesheet)
+            draw_showdown_screen(screen, is_split, bet, chips, player, dealer, split, card_spritesheet)
         pygame.display.update()
         clock.tick(FPS)
         # dealer play
         if state == 'PLAY' and phase == 'DEALER':
             pygame.time.delay(DEALER_DELAY_MSEC)
             if dealer.bj_value() < 17:
-                draw_card_deal_animation(screen, state, phase, bet, chips, 'DEALER', player, dealer, card_spritesheet, clock)
+                draw_card_deal_animation(screen, state, phase, is_split, bet, chips, 'DEALER', player, dealer, split, card_spritesheet, clock)
                 dealer.add_card(shoe.pop(0))
             else:
                 state = 'SHOWDOWN'
@@ -196,7 +218,7 @@ def draw_chip_amount(display, num_chips):
     display.blit(chip_surface, chip_rect)
 
 
-def draw_total_amounts(display, player_hand, dealer_hand, game_phase):
+def draw_total_amounts(display, game_phase, split_flag, player_hand, dealer_hand, split_hand):
     player_total_surface = render_text_surface(str(player_hand.bj_value()), FONT_TOTAL_SIZE)
     player_total_rect = player_total_surface.get_rect()
     player_total_rect.topleft = COORDS['PLAYER_TOTAL']
@@ -209,6 +231,11 @@ def draw_total_amounts(display, player_hand, dealer_hand, game_phase):
     dealer_total_rect = dealer_total_surface.get_rect()
     dealer_total_rect.topleft = COORDS['DEALER_TOTAL']
     display.blit(dealer_total_surface, dealer_total_rect)
+    if split_flag:
+        split_total_surface = render_text_surface(str(split_hand.bj_value()), FONT_TOTAL_SIZE)
+        split_total_rect = split_total_surface.get_rect()
+        split_total_rect.topleft = COORDS['SPLIT_TOTAL']
+        display.blit(split_total_surface, split_total_rect)
 
 
 def draw_bet_screen(display, num_bet, num_chips):
@@ -228,22 +255,24 @@ def draw_bet_screen(display, num_bet, num_chips):
         display.blit(option_surface, option_rect)
 
 
-def draw_play_screen(display, game_phase, num_bet, num_chips, player_hand, dealer_hand, card_sheet):
+def draw_play_screen(display, game_phase, split_flag, num_bet, num_chips, player_hand, dealer_hand, split_hand, card_sheet):
     draw_chip_amount(display, num_chips)
     draw_bet_amount(display, num_bet)
     draw_shoe(display)
     draw_player_hand(display, player_hand, card_sheet)
     draw_dealer_hand(display, dealer_hand, game_phase, card_sheet)
-    draw_total_amounts(display, player_hand, dealer_hand, game_phase)
-    if game_phase == 'PLAYER':
-        draw_play_options(display, player_hand)
+    if split_flag:
+        draw_split_hand(display, split_hand, card_sheet)
+    draw_total_amounts(display, game_phase, split_flag, player_hand, dealer_hand, split_hand)
+    if game_phase == 'PLAYER' or game_phase == 'SPLIT':
+        draw_play_options(display, player_hand, split_flag)
 
 
-def draw_showdown_screen(display, num_bet, num_chips, player_hand, dealer_hand, card_sheet):
+def draw_showdown_screen(display, split_flag, num_bet, num_chips, player_hand, dealer_hand, split_hand, card_sheet):
     draw_shoe(display)
     draw_player_hand(display, player_hand, card_sheet)
     draw_dealer_hand(display, dealer_hand, 'DEALER', card_sheet)
-    draw_total_amounts(display, player_hand, dealer_hand, 'DEALER')
+    draw_total_amounts(display, 'SHOWDOWN', split_flag, player_hand, dealer_hand, split_hand)
     draw_bet_amount(display, num_bet)
     draw_chip_amount(display, num_chips)
     if player_hand.is_bust():
@@ -266,11 +295,11 @@ def draw_showdown_screen(display, num_bet, num_chips, player_hand, dealer_hand, 
     display.blit(subtext_surface, subtext_rect)
 
 
-def draw_play_options(display, player_hand):
+def draw_play_options(display, player_hand, split_flag):
     valid_play_options = [TEXT['PLAY_HIT'], TEXT['PLAY_STAND']]
     if player_hand.can_double():
         valid_play_options.append(TEXT['PLAY_DOUBLE'])
-    if player_hand.can_split():
+    if player_hand.can_split() and not split_flag:
         valid_play_options.append(TEXT['PLAY_SPLIT'])
     for i in range(len(valid_play_options)):
         rev_index = len(valid_play_options) - i - 1
@@ -319,13 +348,27 @@ def draw_player_hand(display, player_hand, card_sheet):
         card_num += 1
 
 
-def draw_card_deal_animation(display, game_state, game_phase, num_bet, num_chips, deal_to, player_hand, dealer_hand, card_sheet, clock):
+def draw_split_hand(display, split_hand, card_sheet):
+    card_num = 0
+    for card in split_hand:
+        card_surface = get_card_image(card, card_sheet)
+        card_x = COORDS['SPLIT_HAND'][0] + card_num * CARD_LATERAL_OFFSET
+        card_rect = card_surface.get_rect()
+        card_rect.topleft = (card_x, COORDS['SPLIT_HAND'][1])
+        display.blit(card_surface, card_rect)
+        card_num += 1
+
+
+def draw_card_deal_animation(display, game_state, game_phase, split_flag, num_bet, num_chips, deal_to, player_hand, dealer_hand, split_hand, card_sheet, clock):
     if deal_to == 'PLAYER':
         end_x = COORDS['PLAYER_HAND'][0] + (len(player_hand)-1)*CARD_LATERAL_OFFSET
         end_y = COORDS['PLAYER_HAND'][1]
     elif deal_to == 'DEALER':
         end_x = COORDS['DEALER_HAND'][0] + (len(dealer_hand)-1)*CARD_LATERAL_OFFSET
         end_y = COORDS['DEALER_HAND'][1]
+    elif deal_to == 'SPLIT':
+        end_x = COORDS['SPLIT_HAND'][0] + (len(split_hand)-1)*CARD_LATERAL_OFFSET
+        end_y = COORDS['SPLIT_HAND'][1]
     step_x = (end_x - COORDS['SHOE'][0]) / CARD_DEAL_ANIM_FRAMES
     step_y = (end_y - COORDS['SHOE'][1]) / CARD_DEAL_ANIM_FRAMES
     card_back_surface = pygame.image.load(FILE_NAMES['CARD_BACK']).convert()
@@ -335,7 +378,7 @@ def draw_card_deal_animation(display, game_state, game_phase, num_bet, num_chips
         if game_state == 'BET':
             draw_bet_screen(display, num_bet, num_chips)
         elif game_state == 'PLAY':
-            draw_play_screen(display, game_phase, num_bet, num_chips, player_hand, dealer_hand, card_sheet)
+            draw_play_screen(display, game_phase, split_flag, num_bet, num_chips, player_hand, dealer_hand, split_hand, card_sheet)
         card_back_rect.topleft = (COORDS['SHOE'][0]+i*step_x, COORDS['SHOE'][1]+i*step_y)
         display.blit(card_back_surface, card_back_rect)
         pygame.display.update()

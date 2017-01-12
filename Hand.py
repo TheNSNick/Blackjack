@@ -1,6 +1,3 @@
-import Card
-
-
 class Hand:
 
     def __init__(self, start_hand=[]):
@@ -53,6 +50,9 @@ class Hand:
             if self.cards[0].value == self.cards[1].value:
                 return True
         return False
+
+    def split(self):
+        return self.cards.pop(1)
 
     def can_double(self):
         return len(self.cards) == 2
