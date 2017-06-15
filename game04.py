@@ -111,8 +111,8 @@ class Hand:
                     val += card.face_value()
                     if card.face_value() == 1:
                         ace = True
-                if ace and val <= 11:
-                    val += 10
+            if ace and val <= 11:
+                val += 10
             return val
 
 
