@@ -11,6 +11,7 @@ CARD_HEIGHT = 88
 FPS = 60
 HAND_WIDTH = 300
 HAND_OFFSET = 30
+SHOE_OFFSET = 3
 BG_COLOR = (0, 114, 0)
 FONT_COLOR = (255, 215, 0)
 PLAYER_COORDS = (0, 400)
@@ -24,6 +25,7 @@ SPLIT_BET_COORDS = (3 * SCREEN_WIDTH / 4, 555)
 SPLIT_RESULTS_COORDS = (500, 245)
 DEALER_DELAY = 666
 SHOE_CUT_POINT = 30
+ANIMATION_FRAMES = 30
 
 
 class GameState:
@@ -61,15 +63,36 @@ class GameState:
             self.insurance = self.chips
             self.chips = 0
 
+    def card_animation(self, screen, from_coords, to_coords):
+        delta_x = (from_coords[0] - to_coords[0]) / ANIMATION_FRAMES
+        delta_y = (from_coords[1] - to_coords[1]) / ANIMATION_FRAMES
+        for i in range(ANIMATION_FRAMES):
+            self.draw(screen)
+            card_surf = self.dealer.card_back
+            card_rect = card_surf.get_rect()
+            card_rect.left = from_coords[0] - (i * delta_x)
+            card_rect.top = from_coords[1] - (i * delta_y)
+            screen.blit(card_surf, card_rect)
+            pygame.display.update()
+            self.clock.tick(FPS)
+
     def deal_card(self, screen, recipient):
+        from_coords = list(SHOE_COORDS)
+        from_coords[0] -= (len(self.shoe) / 10) * SHOE_OFFSET
         if recipient == 'player':
-            #TODO -- animation
+            to_coords = list(PLAYER_COORDS)
+            to_coords[0] += len(self.player) * HAND_OFFSET
+            self.card_animation(screen, from_coords, to_coords)
             self.player.append(self.shoe.pop())
         elif recipient == 'dealer':
-            #TODO -- animation
+            to_coords = list(DEALER_COORDS)
+            to_coords[0] += len(self.dealer) * HAND_OFFSET
+            self.card_animation(screen, from_coords, to_coords)
             self.dealer.append(self.shoe.pop())
         elif recipient == 'split':
-            #TODO -- animation
+            to_coords = list(SPLIT_COORDS)
+            to_coords[0] += len(self.split) * HAND_OFFSET
+            self.card_animation(screen, from_coords, to_coords)
             self.split.append(self.shoe.pop())
 
     def deal_hand(self, screen):
@@ -114,6 +137,7 @@ class GameState:
             hide_first_card = False
             if self.state in ['bet', 'player', 'insurance', 'split']:
                 hide_first_card = True
+                #TODO -- DRAW KEY OPTIONS
             self.dealer.draw(screen, hide_first_card)
             if self.state == 'insurance':
                 self.draw_insurance(screen)
@@ -162,7 +186,7 @@ class GameState:
             card_surf = self.dealer.card_back
             card_rect = card_surf.get_rect()
             card_rect.topleft = SHOE_COORDS
-            card_rect.left -= i * 3
+            card_rect.left -= i * SHOE_OFFSET
             screen.blit(card_surf, card_rect)
 
     def load_chips(self):
@@ -238,8 +262,13 @@ class GameState:
 
     def split_hand(self, screen):
         self.split = Hand(SPLIT_COORDS)
-        # TODO -- animation
-        self.split.append(self.player.cards.pop(-1))
+        from_coords = list(PLAYER_COORDS)
+        from_coords[0] += HAND_OFFSET
+        to_coords = list(SPLIT_COORDS)
+        split_card = self.player.cards.pop()
+        self.card_animation(screen, from_coords, to_coords)
+        self.split.append(split_card)
+        self.deal_card(screen, 'player')
 
 
 class Hand:
@@ -394,7 +423,6 @@ def main():
                     elif event.key == K_p and len(game.player) == 2 and game.split is None:
                         if game.player.cards[0][0] == game.player.cards[1][0]:
                             game.split_hand(screen)
-                            game.deal_card(screen, 'player')
                 elif game.state == 'split':
                     if event.key == K_h:
                         game.deal_card(screen, 'split')
