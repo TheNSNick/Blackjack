@@ -23,6 +23,8 @@ BET_COORDS = (SCREEN_WIDTH / 4, 555)
 SPLIT_COORDS = (450, 400)
 SPLIT_BET_COORDS = (3 * SCREEN_WIDTH / 4, 555)
 SPLIT_RESULTS_COORDS = (500, 245)
+OPTION_COORDS = (350, 400)
+OPTION_OFFSET = 5
 DEALER_DELAY = 666
 SHOE_CUT_POINT = 30
 ANIMATION_FRAMES = 30
@@ -132,12 +134,13 @@ class GameState:
             self.draw_bet(screen)
             self.draw_shoe(screen)
             self.player.draw(screen)
+            self.draw_turn_arrow(screen)
             if self.split is not None:
                 self.split.draw(screen)
             hide_first_card = False
             if self.state in ['bet', 'player', 'insurance', 'split']:
                 hide_first_card = True
-                #TODO -- DRAW KEY OPTIONS
+                self.draw_key_options(screen)
             self.dealer.draw(screen, hide_first_card)
             if self.state == 'insurance':
                 self.draw_insurance(screen)
@@ -172,6 +175,30 @@ class GameState:
         footer_rect.center = (SCREEN_WIDTH / 2, 2 * SCREEN_HEIGHT / 3)
         screen.blit(footer_surf, footer_rect)
 
+    def draw_key_options(self, screen):
+        if self.state == 'player' or self.state == 'split':
+            hit_surf, hit_rect = text_surf_and_rect('H - Hit', self.font)
+            hit_rect.topleft = OPTION_COORDS
+            screen.blit(hit_surf, hit_rect)
+            stand_surf, stand_rect = text_surf_and_rect('S - Stand', self.font)
+            stand_rect.left = OPTION_COORDS[0]
+            stand_rect.top = hit_rect.bottom + OPTION_OFFSET
+            screen.blit(stand_surf, stand_rect)
+            double_rect = None
+            if (self.state == 'player' and len(self.player) == 2) or (self.state == 'split' and len(self.split) == 2):
+                double_surf, double_rect = text_surf_and_rect('D - Double', self.font)
+                double_rect.left = OPTION_COORDS[0]
+                double_rect.top = stand_rect.bottom + OPTION_OFFSET
+                screen.blit(double_surf, double_rect)
+            if self.state == 'player' and len(self.player) == 2 and self.player.cards[0][0] == self.player.cards[1][0]:
+                split_surf, split_rect = text_surf_and_rect('P - Split', self.font)
+                split_rect.left = OPTION_COORDS[0]
+                if double_rect is not None:
+                    split_rect.top = double_rect.bottom + OPTION_OFFSET
+                else:
+                    split_rect.top = stand_rect.bottom + OPTION_OFFSET
+                screen.blit(split_surf, split_rect)
+
     def draw_results(self, screen):
         results_surf, results_rect = text_surf_and_rect(self.results, self.font)
         results_rect.topleft = RESULTS_COORDS
@@ -188,6 +215,22 @@ class GameState:
             card_rect.topleft = SHOE_COORDS
             card_rect.left -= i * SHOE_OFFSET
             screen.blit(card_surf, card_rect)
+
+    def draw_turn_arrow(self, screen):
+        if self.state == 'player':
+            arrow_point_1 = list(PLAYER_COORDS)
+        elif self.state == 'dealer':
+            arrow_point_1 = list(DEALER_COORDS)
+        elif self.state == 'split':
+            arrow_point_1 = list(SPLIT_COORDS)
+        else:
+            return
+        arrow_point_1[0] += 10 + HAND_OFFSET
+        arrow_point_1[1] -= 10
+        arrow_point_2 = (arrow_point_1[0] + 10, arrow_point_1[1])
+        arrow_point_3 = (arrow_point_1[0] + 5, arrow_point_1[1] + 5)
+        arrow_points = [arrow_point_1, arrow_point_2, arrow_point_3]
+        pygame.draw.polygon(screen, FONT_COLOR, arrow_points)
 
     def load_chips(self):
         with open('chips.txt', 'r') as readfile:
@@ -261,6 +304,12 @@ class GameState:
             writefile.write(str(self.chips))
 
     def split_hand(self, screen):
+        if self.chips >= self.bet:
+            self.split_bet = self.bet
+            self.chips -= self.split_bet
+        else:
+            self.split_bet = self.chips
+            self.chips = 0
         self.split = Hand(SPLIT_COORDS)
         from_coords = list(PLAYER_COORDS)
         from_coords[0] += HAND_OFFSET
@@ -413,10 +462,13 @@ def main():
                         else:
                             game.deal_card(screen, 'split')
                             game.state = 'split'
-                    elif event.key == K_d and len(game.player) == 2 and game.split is None:
+                    elif event.key == K_d and len(game.player) == 2:
                         game.double_bet()
                         game.deal_card(screen, 'player')
-                        if game.player.total() > 21:
+                        if game.split is not None:
+                            game.deal_card(screen, 'split')
+                            game.state = 'split'
+                        elif game.player.total() > 21:
                             game.state = 'showdown'
                         else:
                             game.state = 'dealer'
